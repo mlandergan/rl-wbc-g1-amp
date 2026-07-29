@@ -4,22 +4,21 @@ Project 2 in the `rl-wbc-g1-*` series (see [`rl-wbc-g1-baseline`](../rl-wbc-g1-b
 Project 1). Adds Adversarial Motion Priors (AMP) on top of the PPO baseline so the G1 learns a
 walking *style* from reference motion instead of hand-tuned regularization terms.
 
-**Status: scaffolding only, not yet trained or verified.** Local-only until GPU access comes
-through — do not push to GitHub yet.
+**Status: in progress, not yet trained or verified.**
 
-## Open architecture question
+`docker/`, `scripts/`, and `isaaclab_project/g1_baseline/` are copied from
+[`rl-wbc-g1-baseline`](https://github.com/mlandergan/rl-wbc-g1-baseline) as the starting point —
+same GCP VM lifecycle, same Docker base, same Post 1 task reward — to be adapted with an AMP
+style reward on top.
 
-Isaac Lab's own native AMP support is through **skrl**, not **rsl_rl** — the library the rest of
-this series is built on. Two ways to reconcile that, not yet decided:
+## Training library: skrl
 
-1. Use `skrl` for this project only (Isaac Lab's AMP support works out of the box via
-   `--algorithm AMP`), breaking the "one training library across the series" thread.
-2. Port the approach from
-   [`escontra/AMP_for_hardware`](https://github.com/escontra/AMP_for_hardware) — the reference
-   implementation behind "Adversarial Motion Priors Make Good Substitutes for Complex Reward
-   Functions," which extends **rsl_rl itself** with an AMP discriminator running alongside PPO —
-   from Isaac Gym onto Isaac Lab. More work, keeps the series on one library, consistent with how
-   SAC was handled in Project 1 (`rsl_rl_sac`, same "extend rsl_rl" pattern).
+Isaac Lab's native AMP support is through **skrl**, not **rsl_rl** (the library Project 1 uses) —
+decided in favor of `skrl` since Isaac Lab's AMP agent works out of the box through it, versus
+porting [`escontra/AMP_for_hardware`](https://github.com/escontra/AMP_for_hardware)'s
+rsl_rl-based AMP implementation from Isaac Gym onto Isaac Lab from scratch. This breaks the
+"one training library across the series" thread from Project 1, in exchange for building on a
+supported path instead of porting research code across sim frameworks.
 
 ## Reference motion data
 
