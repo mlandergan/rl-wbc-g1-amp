@@ -13,7 +13,7 @@ docker run --rm --gpus all \
   -e ACCEPT_EULA=Y \
   -e TASK="${TASK}" -e CHECKPOINT="${CHECKPOINT}" -e NUM_ENVS="${NUM_ENVS}" \
   -v "$(pwd)/logs:/workspace/isaaclab_root/logs" \
-  rl-wbc-g1-baseline \
+  rl-wbc-g1-amp \
   bash -lc '
     set -euo pipefail
     cd /workspace/isaaclab_root

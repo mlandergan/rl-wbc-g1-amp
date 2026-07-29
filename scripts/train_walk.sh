@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Launch PPO training inside the Project 1 Docker image. Run on the GCP VM after
-# scripts/remote_setup.sh has built `rl-wbc-g1-baseline`. Mounts ./logs from the current
+# scripts/remote_setup.sh has built `rl-wbc-g1-amp`. Mounts ./logs from the current
 # directory so checkpoints/TensorBoard logs survive container exit -- that's what
 # scripts/sync_results.sh pulls back to your local machine.
 #
@@ -19,7 +19,7 @@ docker run --rm --gpus all \
   -e ACCEPT_EULA=Y \
   -e TASK="${TASK}" -e NUM_ENVS="${NUM_ENVS}" -e MAX_ITERATIONS="${MAX_ITERATIONS}" \
   -v "$(pwd)/logs:/workspace/isaaclab_root/logs" \
-  rl-wbc-g1-baseline \
+  rl-wbc-g1-amp \
   bash -lc '
     set -euo pipefail
     cd /workspace/isaaclab_root

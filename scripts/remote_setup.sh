@@ -37,11 +37,11 @@ docker login nvcr.io
 
 echo
 echo "Building the Project 1 image..."
-docker build -f docker/Dockerfile -t rl-wbc-g1-baseline .
+docker build -f docker/Dockerfile -t rl-wbc-g1-amp .
 
 echo
 echo "Sanity check: GPU visible inside a container?"
-docker run --rm --gpus all rl-wbc-g1-baseline nvidia-smi
+docker run --rm --gpus all rl-wbc-g1-amp nvidia-smi
 
 echo
 echo "Setup complete. Next: scripts/train_walk.sh"

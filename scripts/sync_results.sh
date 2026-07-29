@@ -6,7 +6,7 @@ set -euo pipefail
 PROJECT_ID="${PROJECT_ID:?Set PROJECT_ID to your GCP project id}"
 ZONE="${ZONE:-us-central1-a}"
 INSTANCE_NAME="${INSTANCE_NAME:-g1-baseline-t4}"
-REMOTE_LOGS_DIR="${REMOTE_LOGS_DIR:-~/rl-wbc-g1-baseline/logs}"
+REMOTE_LOGS_DIR="${REMOTE_LOGS_DIR:-~/rl-wbc-g1-amp/logs}"
 LOCAL_DEST="${LOCAL_DEST:-./logs}"
 
 mkdir -p "${LOCAL_DEST}"

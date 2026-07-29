@@ -1,9 +1,11 @@
-# Project 1 baseline image: Isaac Lab (official NGC build) + our thin task-registration
-# extension. See project_01_baseline_locomotion.md section 6.3 for why we build on the prebuilt
-# image instead of a native Isaac Sim install.
+# Project 2 image: Isaac Lab (official NGC build) + our task-registration extension. Carries
+# both Project 1's g1_baseline task (PPO via rsl_rl, copied over as a reference/starting point)
+# and Project 2's g1_amp task (AMP via skrl) in one image -- see rl-wbc-g1-baseline's own
+# Dockerfile for the rationale on building on the prebuilt image instead of a native Isaac Sim
+# install.
 #
 # Build (from repo root):
-#   docker build -f docker/Dockerfile -t rl-wbc-g1-baseline .
+#   docker build -f docker/Dockerfile -t rl-wbc-g1-amp .
 # Requires `docker login nvcr.io` with an NGC account first.
 FROM nvcr.io/nvidia/isaac-lab:2.3.2
 
@@ -29,6 +31,11 @@ RUN /isaac-sim/kit/python/bin/python3.11 docker/patch_register_task.py
 RUN ISAACLAB_SH="$(find / -xdev -name isaaclab.sh 2>/dev/null | head -n1)" && \
     test -n "${ISAACLAB_SH}" || (echo "isaaclab.sh not found in this image -- base image layout changed?" >&2 && exit 1) && \
     ln -s "$(dirname "${ISAACLAB_SH}")" /workspace/isaaclab_root
+
+# Project 2 (g1_amp) trains via skrl, not rsl_rl -- install it alongside rsl_rl rather than in
+# place of it, via Isaac Lab's own installer (handles skrl's specific torch/numpy pins for this
+# image, more robust than a bare pip install). Idempotent if skrl's already present.
+RUN cd /workspace/isaaclab_root && ./isaaclab.sh -i skrl
 
 # The base isaac-lab image sets ENTRYPOINT to /isaac-sim/runheadless.sh, which swallows any CMD
 # or `docker run <image> <cmd>` args as launch parameters for Isaac Sim's own GUI/streaming app
