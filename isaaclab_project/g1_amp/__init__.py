@@ -31,3 +31,27 @@ gym.register(
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_g1_amp_cfg.yaml",
     },
 )
+
+# Binary-search control condition: linden713/humanoid_amp's known-working walk data + agent
+# config through our env (see G1AmpLindenWalkEnvCfg's docstring for the rationale).
+gym.register(
+    id="Isaac-G1-AMP-LindenWalk-Direct-v0",
+    entry_point=f"{__name__}.g1_amp_env:G1AmpEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.g1_amp_env_cfg:G1AmpLindenWalkEnvCfg",
+        "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_g1_amp_linden_cfg.yaml",
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_g1_amp_linden_cfg.yaml",
+    },
+)
+
+gym.register(
+    id="Isaac-G1-AMP-LindenWalk-Direct-Play-v0",
+    entry_point=f"{__name__}.g1_amp_env:G1AmpEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.g1_amp_env_cfg:G1AmpLindenWalkEnvCfg_PLAY",
+        "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_g1_amp_linden_cfg.yaml",
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_g1_amp_linden_cfg.yaml",
+    },
+)

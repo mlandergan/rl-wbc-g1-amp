@@ -1,9 +1,25 @@
 # Adapted from linden713/humanoid_amp's skrl_g1_walk_amp_cfg.yaml (BSD-3-Clause), which is
 # pure imitation (task_reward_weight: 0). Project 2 layers a velocity-command task reward on
-# top of AMP (see g1_amp_env.py), so task_reward_weight is non-zero here — task=1.0/style=2.0,
-# matching the ratio already sketched in the blog post draft's own AMP wiring snippet
-# (style-emphasized, per the original AMP paper's convention that style should be weighted at
-# least as heavily as task, since task alone is already solvable by plain RL).
+# top of AMP (see g1_amp_env.py), so task_reward_weight is non-zero here.
+#
+# 2026-07-30: after the reward-parity pass still failed to reproduce Project 1's walking
+# quality, we compared PPO hyperparameters between the two projects and found they were NOT
+# actually equivalent (only "library + AMP" was assumed to differ) -- rsl_rl's PPO settings
+# (learning rate/schedule, entropy bonus, action noise, network shape, rollout length, grad
+# clipping, obs normalization) are all ported to their skrl equivalents below, transcribed
+# from rl-wbc-g1-baseline/logs/rsl_rl/g1_flat/.../params/agent.yaml (Project 1's actual
+# resolved config, not just the source cfg class). Budget note: Project 1's real training
+# length is 36,000 per-env steps (1500 iterations * 24 steps/iter -- NOT the same unit as
+# skrl's `timesteps`, which already counts per-env steps the same way, so 1500 alone would
+# be a 24x-too-short budget here).
+#
+# 2026-07-31: the 8-step-episode collapse was traced to three compounding env/data bugs
+# (action mapping centered on joint-limit midpoints; reference motion floating ~0.08 m above
+# ground; mocap-stiff arm/waist actuator gains) -- all fixed, validated by a zero-action
+# probe and a 2k AMP-off smoke test (episode length 13->27 and climbing vs pinned at ~7
+# before). task/style weights are now 0.5/0.5 for the first full AMP-on run: the AMP paper's
+# canonical goal/style split, viable now that style no longer has to do the "keep the robot
+# alive" job the task reward's termination penalty already covers.
 
 seed: 42
 
@@ -17,13 +33,13 @@ models:
     clip_log_std: True
     min_log_std: -20.0
     max_log_std: 2.0
-    initial_log_std: -2.9
-    fixed_log_std: True
+    initial_log_std: 0.0  # std=1.0, matches Project 1's init_noise_std=1.0
+    fixed_log_std: False  # learnable, matches rsl_rl's default (Project 1 never fixes this)
     network:
       - name: net
         input: STATES
-        layers: [1024, 512]
-        activations: relu
+        layers: [256, 128, 128]  # matches Project 1's actor_hidden_dims
+        activations: elu  # matches Project 1's activation
     output: ACTIONS
   value:  # see deterministic_model parameters
     class: DeterministicMixin
@@ -31,17 +47,18 @@ models:
     network:
       - name: net
         input: STATES
-        layers: [1024, 512]
-        activations: relu
+        layers: [256, 128, 128]  # matches Project 1's critic_hidden_dims
+        activations: elu
     output: ONE
-  discriminator:  # see deterministic_model parameters
+  discriminator:  # see deterministic_model parameters -- no Project 1 equivalent (AMP-only),
+    # matched to the same shape as policy/value anyway to avoid an unnecessary third confound
     class: DeterministicMixin
     clip_actions: False
     network:
       - name: net
         input: STATES
-        layers: [1024, 512]
-        activations: relu
+        layers: [256, 128, 128]
+        activations: elu
     output: ONE
 
 # Rollout memory
@@ -66,38 +83,53 @@ reply_buffer:
 # https://skrl.readthedocs.io/en/latest/api/agents/amp.html
 agent:
   class: AMP
-  rollouts: 16
-  learning_epochs: 6
-  mini_batches: 2
-  discount_factor: 0.99
-  lambda: 0.95
-  learning_rate: 5.0e-05
-  learning_rate_scheduler: null
-  learning_rate_scheduler_kwargs: null
-  state_preprocessor: RunningStandardScaler
+  rollouts: 24  # matches Project 1's num_steps_per_env
+  learning_epochs: 5  # matches Project 1's num_learning_epochs
+  mini_batches: 4  # matches Project 1's num_mini_batches
+  discount_factor: 0.99  # already matched Project 1's gamma
+  lambda: 0.95  # already matched Project 1's lam
+  learning_rate: 0.001  # matches Project 1's learning_rate
+  learning_rate_scheduler: KLAdaptiveLR  # matches Project 1's schedule: adaptive
+  learning_rate_scheduler_kwargs:
+    kl_threshold: 0.01  # matches Project 1's desired_kl
+  # Project 1 uses NO obs/value normalization (actor_obs_normalization/critic_obs_normalization/
+  # empirical_normalization are all off) -- disabled here to match. amp_state_preprocessor is
+  # AMP-only (no Project 1 equivalent either way), left as-is since style_reward_weight=0 makes
+  # it a no-op for this reproduction test regardless.
+  state_preprocessor: null
   state_preprocessor_kwargs: null
-  value_preprocessor: RunningStandardScaler
+  value_preprocessor: null
   value_preprocessor_kwargs: null
   amp_state_preprocessor: RunningStandardScaler
   amp_state_preprocessor_kwargs: null
   random_timesteps: 0
   learning_starts: 0
-  grad_norm_clip: 0.0
-  ratio_clip: 0.2
+  grad_norm_clip: 1.0  # matches Project 1's max_grad_norm
+  ratio_clip: 0.2  # already matched Project 1's clip_param
   value_clip: 0.2
-  clip_predicted_values: True
-  entropy_loss_scale: 0.0
-  value_loss_scale: 2.5
-  discriminator_loss_scale: 5.0
+  clip_predicted_values: True  # already matched Project 1's use_clipped_value_loss
+  entropy_loss_scale: 0.008  # matches Project 1's entropy_coef
+  value_loss_scale: 1.0  # matches Project 1's value_loss_coef
+  discriminator_loss_scale: 5.0  # AMP-only, no Project 1 equivalent, left as-is
   amp_batch_size: 512
-  task_reward_weight: 1.0
-  style_reward_weight: 2.0
+  # 2026-07-31 ablation: PURE IMITATION (the reference implementation's native mode). The
+  # 0.5/0.5 combined run walked and tracked velocity (0.88) but style came through as a frozen
+  # caricature (crossed feet, static asymmetric arms) with discriminator loss ~0.09 (easy
+  # separation = weak style gradient). This run isolates whether the style machinery works at
+  # all absent task pressure: a recognizable strut cycle here means the combined run needs
+  # balance/annealing work; the same caricature here means discriminator-side fixes (gradient
+  # penalty, net size, update frequency, more clips).
+  task_reward_weight: 0.0
+  style_reward_weight: 1.0
   discriminator_batch_size: 4096
   discriminator_reward_scale: 2.0
   discriminator_logit_regularization_scale: 0.05
   discriminator_gradient_penalty_scale: 5.0
   discriminator_weight_decay_scale: 1.0e-04
-  time_limit_bootstrap: False
+  time_limit_bootstrap: True  # bootstrap value at episode timeout rather than treating it as
+  # a hard end -- Isaac Lab's rsl_rl wrapper does this for Project 1 by default; without it here,
+  # a *successful* full-length episode gets its final steps' returns truncated the same way a
+  # fall would, which is the wrong signal.
   # logging and checkpoint
   experiment:
     directory: "g1_amp_strut_walk"
@@ -109,5 +141,5 @@ agent:
 # https://skrl.readthedocs.io/en/latest/api/trainers/sequential.html
 trainer:
   class: SequentialTrainer
-  timesteps: 50000
+  timesteps: 36000  # budget-matched to Project 1's 1500 iterations * 24 steps/iter (see header)
   environment_info: log

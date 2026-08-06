@@ -33,28 +33,52 @@ DOF_NAMES = [
     "right_elbow_joint", "right_wrist_roll_joint", "right_wrist_pitch_joint", "right_wrist_yaw_joint",
 ]
 
-# matches g1_amp_env.py's key_body_names + "pelvis" as the reference/root body
-BODY_NAMES = [
-    "pelvis",
-    "left_shoulder_pitch_link", "right_shoulder_pitch_link",
-    "left_elbow_link", "right_elbow_link",
-    "right_hip_yaw_link", "left_hip_yaw_link",
-    "right_rubber_hand", "left_rubber_hand",
-    "right_ankle_roll_link", "left_ankle_roll_link",
+# (npz_name, mjcf_name) pairs. npz_name is what we store in the output file and what
+# g1_amp_env.py's key_body_names looks up by (must match Isaac Lab's G1_29DOF_CFG body
+# names). mjcf_name is what GMR's own g1_mocap_29dof.xml calls that body for FK purposes.
+# These differ only for the hands: Isaac Lab's asset calls it "*_hand_palm_link", GMR's
+# calls it "*_rubber_hand" -- same body, two different naming conventions, matched here
+# by hand since nothing else ties them together automatically.
+BODY_NAME_PAIRS = [
+    ("pelvis", "pelvis"),
+    ("left_shoulder_pitch_link", "left_shoulder_pitch_link"),
+    ("right_shoulder_pitch_link", "right_shoulder_pitch_link"),
+    ("left_elbow_link", "left_elbow_link"),
+    ("right_elbow_link", "right_elbow_link"),
+    ("right_hip_yaw_link", "right_hip_yaw_link"),
+    ("left_hip_yaw_link", "left_hip_yaw_link"),
+    ("right_hand_palm_link", "right_rubber_hand"),
+    ("left_hand_palm_link", "left_rubber_hand"),
+    ("right_ankle_roll_link", "right_ankle_roll_link"),
+    ("left_ankle_roll_link", "left_ankle_roll_link"),
 ]
+BODY_NAMES = [npz_name for npz_name, _ in BODY_NAME_PAIRS]
+MJCF_BODY_NAMES = [mjcf_name for _, mjcf_name in BODY_NAME_PAIRS]
+
+# Vertical distance from the ankle_roll_link frame origin down to the foot sole contact plane:
+# g1_mocap_29dof.xml models the sole as four contact spheres at z=-0.03 with radius 0.005.
+# Used by the ground-alignment step to decide where "foot touching the floor" actually is.
+FOOT_SOLE_OFFSET_M = 0.035
 
 
 def quat_angular_velocity(q_prev: np.ndarray, q_next: np.ndarray, dt: float) -> np.ndarray:
-    """wxyz quaternions in, angular velocity (rad/s) out."""
+    """wxyz quaternions in, *world-frame* angular velocity (rad/s) out.
+
+    Uses the world-frame relative rotation q_next * q_prev^-1, so the extracted rotation
+    axis is expressed in world axes -- matching Isaac Lab's body_ang_vel_w, which is what
+    these values get compared against in the AMP observation. (An earlier version computed
+    q_prev^-1 * q_next, whose axis is in the *body* frame -- a small but systematic frame
+    mismatch between the reference data and the simulated robot.)
+    """
     w0, x0, y0, z0 = q_prev
     inv = np.array([w0, -x0, -y0, -z0]) / max(w0 * w0 + x0 * x0 + y0 * y0 + z0 * z0, 1e-8)
     w1, x1, y1, z1 = q_next
     w2, x2, y2, z2 = inv
-    # q_rel = inv * q_next (Hamilton product)
-    rw = w2 * w1 - x2 * x1 - y2 * y1 - z2 * z1
-    rx = w2 * x1 + x2 * w1 + y2 * z1 - z2 * y1
-    ry = w2 * y1 - x2 * z1 + y2 * w1 + z2 * x1
-    rz = w2 * z1 + x2 * y1 - y2 * x1 + z2 * w1
+    # q_rel = q_next * inv (Hamilton product, world-frame delta)
+    rw = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+    rx = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+    ry = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+    rz = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
     q_rel = np.array([rw, rx, ry, rz])
     n = np.linalg.norm(q_rel)
     if n < 1e-8:
@@ -78,6 +102,13 @@ def main():
     parser.add_argument("--align_x", action="store_true", default=True,
                          help="Rotate the clip so net travel direction points along world +X (default: on)")
     parser.add_argument("--no-align_x", dest="align_x", action="store_false")
+    parser.add_argument("--ground_align", action="store_true", default=True,
+                         help="Shift the clip vertically so the lowest foot-sole point over the whole clip "
+                              "touches z=0 (default: on). GMR output is not guaranteed to be ground-registered: "
+                              "the Strut Walking clip came out floating ~0.08-0.09 m, which made every training "
+                              "reset a free-fall drop and put the reference root height physically out of reach "
+                              "of a robot actually standing on the floor.")
+    parser.add_argument("--no-ground_align", dest="ground_align", action="store_false")
     args = parser.parse_args()
 
     with open(args.pkl, "rb") as f:
@@ -114,9 +145,9 @@ def main():
 
     model = mujoco.MjModel.from_xml_path(args.mjcf)
     data = mujoco.MjData(model)
-    body_ids = [mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, n) for n in BODY_NAMES]
+    body_ids = [mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, n) for n in MJCF_BODY_NAMES]
     if any(b == -1 for b in body_ids):
-        missing = [n for n, b in zip(BODY_NAMES, body_ids) if b == -1]
+        missing = [n for n, b in zip(MJCF_BODY_NAMES, body_ids) if b == -1]
         raise ValueError(f"Body name(s) not found in MJCF: {missing}")
 
     body_positions = np.zeros((n_frames, len(BODY_NAMES), 3), dtype=np.float32)
@@ -133,6 +164,14 @@ def main():
         for j, bid in enumerate(body_ids):
             body_positions[t, j] = data.xpos[bid]
             body_rotations[t, j] = data.xquat[bid]
+
+    if args.ground_align:
+        # constant vertical shift for the whole clip (per-frame shifting would distort the
+        # dynamics): lowest sole-contact point across all frames lands exactly on z=0.
+        foot_indexes = [BODY_NAMES.index(n) for n in ("left_ankle_roll_link", "right_ankle_roll_link")]
+        offset = float(body_positions[:, foot_indexes, 2].min()) - FOOT_SOLE_OFFSET_M
+        body_positions[:, :, 2] -= offset
+        print(f"Ground-aligned clip: shifted z by {-offset:+.4f} m (lowest foot sole now at 0)")
 
     # dof velocities: central difference, forward/backward at boundaries, then smooth
     dof_velocities = np.zeros_like(dof_pos, dtype=np.float32)

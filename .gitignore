@@ -1,7 +1,20 @@
 .claude/
 logs/
+logs_pulled/
 *.tar.gz
 __pycache__/
 *.pyc
 .DS_Store
 node_modules/
+
+# raw Mixamo motion capture assets -- Mixamo restricts redistributing these; keep the
+# retargeted derivatives (*.pkl, *.mp4) but not the source bvh/fbx/mov files.
+data/mixamo/*.bvh
+data/mixamo/*.fbx
+data/mixamo/*.mov
+
+# LAFAN1 raw data and its retargeted derivative -- CC BY-NC-ND 4.0, No-Derivatives, stricter
+# than Mixamo's terms. Never used in an actual training run; excluded entirely rather than
+# relying on personal-use-only framing.
+data/lafan1/
+isaaclab_project/g1_amp/motions/G1_lafan1_walk1.npz
