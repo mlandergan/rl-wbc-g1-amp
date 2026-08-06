@@ -1,35 +1,42 @@
 # rl-wbc-g1-amp
 
-Project 2 in the `rl-wbc-g1-*` series (see [`rl-wbc-g1-baseline`](../rl-wbc-g1-baseline) for
-Project 1). Adds Adversarial Motion Priors (AMP) on top of the PPO baseline so the G1 learns a
-walking *style* from reference motion instead of hand-tuned regularization terms.
+Part of the `rl-wbc-g1-*` series (see [`rl-wbc-g1-baseline`](https://github.com/mlandergan/rl-wbc-g1-baseline)
+for the PPO velocity-tracking baseline this builds on). Adds Adversarial Motion Priors (AMP) on
+top of that baseline so the G1 learns a walking *style* from a reference motion clip instead of
+hand-tuned regularization terms.
 
-**Status: in progress, not yet trained or verified.**
+**Status: trained and working.** See [`checkpoints/README.md`](checkpoints/README.md) to run the
+trained policy yourself. Write-up: [Stylized Walking for the Unitree G1 with Adversarial Motion
+Priors](https://mlandergan.github.io/blog/g1-amp-stylized-walking/).
 
 `docker/`, `scripts/`, and `isaaclab_project/g1_baseline/` are copied from
 [`rl-wbc-g1-baseline`](https://github.com/mlandergan/rl-wbc-g1-baseline) as the starting point —
-same GCP VM lifecycle, same Docker base, same Post 1 task reward — to be adapted with an AMP
-style reward on top.
+same GCP VM lifecycle, same Docker base, same task reward — adapted with an AMP style reward on
+top.
 
 ## Training library: skrl
 
-Isaac Lab's native AMP support is through **skrl**, not **rsl_rl** (the library Project 1 uses) —
-decided in favor of `skrl` since Isaac Lab's AMP agent works out of the box through it, versus
-porting [`escontra/AMP_for_hardware`](https://github.com/escontra/AMP_for_hardware)'s
+Isaac Lab's native AMP support is through **skrl**, not **rsl_rl** (the library the baseline
+project uses) — decided in favor of `skrl` since Isaac Lab's AMP agent works out of the box
+through it, versus porting [`escontra/AMP_for_hardware`](https://github.com/escontra/AMP_for_hardware)'s
 rsl_rl-based AMP implementation from Isaac Gym onto Isaac Lab from scratch. This breaks the
-"one training library across the series" thread from Project 1, in exchange for building on a
-supported path instead of porting research code across sim frameworks.
+"one training library across the series" thread from the baseline project, in exchange for
+building on a supported path instead of porting research code across sim frameworks.
 
 ## Reference motion data
 
+The reference clip is Mixamo's "Strut Walking" animation, retargeted onto the G1's 29-DOF joint
+convention with [GMR](https://github.com/YanjieZe/GMR) (General Motion Retargeting). Retargeting
+happens once, offline (`isaaclab_project/g1_amp/motions/convert_gmr_to_npz.py`); the retargeted
+result is checked into `isaaclab_project/g1_amp/motions/G1_strut_walk.npz`.
+
+**License caveat, read before redistributing anything:** Mixamo restricts redistributing its raw
+motion assets, so the source `.bvh`/`.fbx` files aren't in this repo (gitignored) — only the
+retargeted derivative and this project's own rendered visualizations are. Treat the reference
+clip as personal use and check Mixamo's current terms before reusing it yourself.
+
 [`lvhaidong/LAFAN1_Retargeting_Dataset`](https://huggingface.co/datasets/lvhaidong/LAFAN1_Retargeting_Dataset)
-on Hugging Face — Ubisoft's LAFAN1 mocap, retargeted to Unitree G1 (and H1/H1_2), CSV per-frame
-joint configs.
-
-**License caveat, read before redistributing anything:** the underlying LAFAN1 mocap data is
-`CC BY-NC-ND 4.0` (non-commercial, no-derivatives) — only the retargeting *code* is MIT. This
-needs to be stated plainly in the blog post, not glossed over.
-
-AMASS is the other major reference-motion source in this space (larger, SMPL-based, aggregates
-many mocap datasets) — worth covering in the post as context even though LAFAN1's G1-retargeted
-CSVs are the practical starting point here.
+(Ubisoft's LAFAN1 mocap, pre-retargeted to the G1) was investigated as an alternative, and used
+as a control condition during debugging, but was never this project's actual training data — its
+`CC BY-NC-ND 4.0` license is stricter than Mixamo's (no derivatives at all), so it's excluded
+from this repo entirely rather than relied on under a personal-use framing.

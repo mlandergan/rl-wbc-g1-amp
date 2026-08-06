@@ -1,6 +1,7 @@
 .claude/
 logs/
 logs_pulled/
+docs/
 *.tar.gz
 __pycache__/
 *.pyc
